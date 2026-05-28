@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import db from "@/lib/db";
 import { geocodeAddress } from "@/lib/geocode";
+import { lookupLocal } from "@/lib/local-addresses";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const rows = db
     .prepare(
-      "SELECT id, address, project_type, completed_date, lat, lng, geocoded, notes, created_at FROM projects ORDER BY completed_date DESC"
+      "SELECT id, address, project_type, completed_date, lat, lng, geocoded, notes, footprint, created_at FROM projects ORDER BY completed_date DESC"
     )
     .all();
   return NextResponse.json(rows);
@@ -22,7 +23,12 @@ export async function POST(req: Request) {
   const completed_date = body.completed_date ?? null;
   const notes = body.notes ?? null;
 
-  const geo = await geocodeAddress(address);
+  // Allow caller to supply coords (e.g. from autocomplete) and skip geocoding.
+  // Otherwise, try local Hoboken address book first; fall back to Nominatim.
+  const geo =
+    typeof body.lat === "number" && typeof body.lng === "number"
+      ? { lat: body.lat as number, lng: body.lng as number }
+      : lookupLocal(address) || (await geocodeAddress(address));
 
   const info = db
     .prepare(
